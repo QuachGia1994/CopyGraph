@@ -12,6 +12,8 @@ from .calibration import build_calibration_report, load_calibration_dataset, loa
 from .dashboard import write_dashboard
 from .evidence import analysis_to_evidence
 from .explain import explain_pair
+from .forensic_dashboard import write_forensic_dashboard
+from .forensics import build_forensic_report
 from .mt5 import collect_mt5_history
 
 
@@ -59,6 +61,12 @@ def _parser() -> argparse.ArgumentParser:
     explain.add_argument("account_b")
     explain.add_argument("--calibration", type=Path)
     explain.add_argument("--output", type=Path, required=True)
+    inspect = subparsers.add_parser("inspect", help="Build a forensic report for two histories")
+    inspect.add_argument("account_a")
+    inspect.add_argument("account_b")
+    inspect.add_argument("--calibration", type=Path)
+    inspect.add_argument("--output", type=Path, required=True)
+    inspect.add_argument("--dashboard", type=Path)
     return parser
 
 
@@ -77,10 +85,16 @@ def main(argv=None) -> int:
             write_dashboard(payload, args.dashboard)
     elif args.command == "calibrate":
         payload = build_calibration_report(load_calibration_dataset(args.dataset))
-    else:
+    elif args.command == "explain":
         analysis, positions_a, positions_b = analyze_pair_paths(args.account_a, args.account_b)
         calibration = load_calibration_model(args.calibration) if args.calibration is not None else None
         payload = explain_pair(analysis, positions_a, positions_b, calibration)
+    else:
+        analysis, positions_a, positions_b = analyze_pair_paths(args.account_a, args.account_b)
+        calibration = load_calibration_model(args.calibration) if args.calibration is not None else None
+        payload = build_forensic_report(analysis, positions_a, positions_b, calibration)
+        if args.dashboard is not None:
+            write_forensic_dashboard(payload, args.dashboard)
     rendered = json.dumps(payload, indent=2, sort_keys=True)
     output = getattr(args, "output", None)
     if output is not None:
