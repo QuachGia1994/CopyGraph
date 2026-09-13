@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,6 +22,20 @@ class CalibrationDataset:
     schema_version: str
     name: str | None
     cases: tuple[ScoredCase, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CalibrationBlock:
+    max_raw: float
+    probability: float
+    count: int
+
+
+@dataclass(frozen=True, slots=True)
+class CalibrationModel:
+    schema_version: str
+    fitted_case_ids: tuple[str, ...]
+    blocks: tuple[CalibrationBlock, ...]
 
 
 def _score_history_case(base: Path, item: dict[str, object]) -> ScoredCase:
@@ -101,3 +116,108 @@ def load_calibration_dataset(path: str | Path) -> CalibrationDataset:
         scored_cases.append(_score_history_case(resolved.parent, item))
     name = str(data["name"]) if data.get("name") not in (None, "") else None
     return CalibrationDataset(schema_version="1.0", name=name, cases=tuple(scored_cases))
+
+
+def _label_value(case: ScoredCase) -> float:
+    if case.label == "copy":
+        return 1.0
+    if case.label == "unrelated":
+        return 0.0
+    raise ValueError(f"unsupported calibration label: {case.label}")
+
+
+def fit_monotonic_calibrator(cases: Sequence[ScoredCase]) -> CalibrationModel:
+    ordered = sorted(cases, key=lambda case: (case.raw_confidence, case.case_id))
+    if not ordered:
+        raise ValueError("at least one calibration case is required")
+
+    grouped: list[list[float]] = []
+    for case in ordered:
+        raw = float(case.raw_confidence)
+        if not 0.0 <= raw <= 1.0:
+            raise ValueError("raw_confidence must be between 0 and 1")
+        target = _label_value(case)
+        if grouped and raw == grouped[-1][0]:
+            grouped[-1][1] += target
+            grouped[-1][2] += 1.0
+        else:
+            grouped.append([raw, target, 1.0])
+
+    pooled: list[list[float]] = []
+    for raw, positives, count in grouped:
+        pooled.append([raw, positives, count])
+        while len(pooled) >= 2:
+            left = pooled[-2]
+            right = pooled[-1]
+            if left[1] / left[2] <= right[1] / right[2]:
+                break
+            pooled[-2:] = [[right[0], left[1] + right[1], left[2] + right[2]]]
+
+    blocks = tuple(
+        CalibrationBlock(max_raw=raw, probability=positives / count, count=int(count))
+        for raw, positives, count in pooled
+    )
+    return CalibrationModel(
+        schema_version="1.0",
+        fitted_case_ids=tuple(sorted(case.case_id for case in ordered)),
+        blocks=blocks,
+    )
+
+
+def apply_calibration(raw_confidence: float, model: CalibrationModel) -> float:
+    if not model.blocks:
+        raise ValueError("calibration model has no blocks")
+    raw = float(raw_confidence)
+    for block in model.blocks:
+        if raw <= block.max_raw:
+            return block.probability
+    return model.blocks[-1].probability
+
+
+def calibration_model_to_dict(model: CalibrationModel) -> dict[str, object]:
+    return {
+        "schema_version": model.schema_version,
+        "fitted_case_ids": list(model.fitted_case_ids),
+        "blocks": [
+            {"max_raw": block.max_raw, "probability": block.probability, "count": block.count}
+            for block in model.blocks
+        ],
+    }
+
+
+def calibration_model_from_dict(payload: Mapping[str, object]) -> CalibrationModel:
+    if payload.get("schema_version") != "1.0":
+        raise ValueError("calibration model schema_version must be 1.0")
+    raw_ids = payload.get("fitted_case_ids")
+    raw_blocks = payload.get("blocks")
+    if not isinstance(raw_ids, list) or not isinstance(raw_blocks, list):
+        raise ValueError("invalid calibration model payload")
+    blocks: list[CalibrationBlock] = []
+    for item in raw_blocks:
+        if not isinstance(item, Mapping):
+            raise ValueError("invalid calibration block")
+        blocks.append(CalibrationBlock(
+            max_raw=float(item["max_raw"]),
+            probability=float(item["probability"]),
+            count=int(item["count"]),
+        ))
+    if not blocks:
+        raise ValueError("calibration model has no blocks")
+    return CalibrationModel(
+        schema_version="1.0",
+        fitted_case_ids=tuple(str(value) for value in raw_ids),
+        blocks=tuple(blocks),
+    )
+
+
+def load_calibration_model(path: str | Path) -> CalibrationModel:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("invalid calibration model payload")
+    if "blocks" in payload:
+        model_payload = payload
+    else:
+        model_payload = payload.get("model")
+        if not isinstance(model_payload, dict):
+            raise ValueError("calibration model unavailable")
+    return calibration_model_from_dict(model_payload)
