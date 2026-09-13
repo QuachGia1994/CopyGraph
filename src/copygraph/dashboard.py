@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Mapping
 
-
-def _safe_json(report: Mapping[str, object]) -> str:
-    rendered = json.dumps(report, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-    return rendered.replace("<", "\\u003c").replace("&", "\\u0026")
+from .htmlutil import safe_json_for_html
 
 
 def render_dashboard(report: Mapping[str, object]) -> str:
-    data = _safe_json(report)
+    data = safe_json_for_html(report)
     return f'''<!doctype html>
 <html lang="en">
 <head>
