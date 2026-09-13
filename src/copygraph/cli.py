@@ -8,8 +8,10 @@ from pathlib import Path
 from .analysis import analyze_pair_paths
 from .batch import analyze_histories
 from .benchmark import run_synthetic_benchmark
+from .calibration import build_calibration_report, load_calibration_dataset, load_calibration_model
 from .dashboard import write_dashboard
 from .evidence import analysis_to_evidence
+from .explain import explain_pair
 from .mt5 import collect_mt5_history
 
 
@@ -49,6 +51,14 @@ def _parser() -> argparse.ArgumentParser:
     batch.add_argument("--output", type=Path, required=True)
     batch.add_argument("--dashboard", type=Path)
     batch.add_argument("--min-confidence", type=_unit_interval, default=0.7)
+    calibrate = subparsers.add_parser("calibrate", help="Fit and evaluate labeled confidence calibration")
+    calibrate.add_argument("dataset")
+    calibrate.add_argument("--output", type=Path, required=True)
+    explain = subparsers.add_parser("explain", help="Explain the evidence behind a pair analysis")
+    explain.add_argument("account_a")
+    explain.add_argument("account_b")
+    explain.add_argument("--calibration", type=Path)
+    explain.add_argument("--output", type=Path, required=True)
     return parser
 
 
@@ -61,10 +71,16 @@ def main(argv=None) -> int:
     elif args.command == "mt5-export":
         now = datetime.now(timezone.utc)
         payload = collect_mt5_history(now - timedelta(days=args.days), now, terminal_path=args.terminal)
-    else:
+    elif args.command == "batch":
         payload = analyze_histories(args.inputs, min_confidence=args.min_confidence)
         if args.dashboard is not None:
             write_dashboard(payload, args.dashboard)
+    elif args.command == "calibrate":
+        payload = build_calibration_report(load_calibration_dataset(args.dataset))
+    else:
+        analysis, positions_a, positions_b = analyze_pair_paths(args.account_a, args.account_b)
+        calibration = load_calibration_model(args.calibration) if args.calibration is not None else None
+        payload = explain_pair(analysis, positions_a, positions_b, calibration)
     rendered = json.dumps(payload, indent=2, sort_keys=True)
     output = getattr(args, "output", None)
     if output is not None:
