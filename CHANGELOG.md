@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Changed
+- Define the V0.3 architecture for calibrated confidence, forensic evidence reports, and incremental SQLite-backed multi-account scanning.
+
 ## [0.2.0] - 2026-09-13
 
 ### Added
