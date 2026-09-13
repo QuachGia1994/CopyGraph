@@ -12,3 +12,4 @@ htmlcov/
 *.log
 *.tmp
 .DS_Store
+.worktrees/
