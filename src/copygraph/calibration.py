@@ -38,6 +38,19 @@ class CalibrationModel:
     blocks: tuple[CalibrationBlock, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class ThresholdMetrics:
+    threshold: float
+    true_positive: int
+    false_positive: int
+    true_negative: int
+    false_negative: int
+    precision: float
+    recall: float
+    false_positive_rate: float
+    f1: float
+
+
 def _score_history_case(base: Path, item: dict[str, object]) -> ScoredCase:
     if "analysis" in item:
         return _score_embedded_case(item)
@@ -221,3 +234,155 @@ def load_calibration_model(path: str | Path) -> CalibrationModel:
         if not isinstance(model_payload, dict):
             raise ValueError("calibration model unavailable")
     return calibration_model_from_dict(model_payload)
+
+
+def evaluate_calibrator(
+    model: CalibrationModel,
+    cases: Sequence[ScoredCase],
+    *,
+    allow_in_sample: bool = False,
+) -> list[dict[str, object]]:
+    fitted = set(model.fitted_case_ids)
+    requested = {case.case_id for case in cases}
+    if not allow_in_sample and fitted.intersection(requested):
+        raise ValueError("in-sample evaluation requires allow_in_sample=True")
+    rows: list[dict[str, object]] = []
+    for case in sorted(cases, key=lambda item: item.case_id):
+        rows.append({
+            "case_id": case.case_id,
+            "label": case.label,
+            "expected_orientation": case.expected_orientation,
+            "observed_orientation": case.observed_orientation,
+            "raw_confidence": case.raw_confidence,
+            "calibrated_confidence": apply_calibration(case.raw_confidence, model),
+            "status": "ok",
+        })
+    return rows
+
+
+def cross_validated_predictions(cases: Sequence[ScoredCase]) -> list[dict[str, object]]:
+    ordered = sorted(cases, key=lambda item: item.case_id)
+    rows: list[dict[str, object]] = []
+    for held_out in ordered:
+        training = [case for case in ordered if case.case_id != held_out.case_id]
+        labels = {case.label for case in training}
+        if labels != {"copy", "unrelated"}:
+            rows.append({
+                "case_id": held_out.case_id,
+                "label": held_out.label,
+                "expected_orientation": held_out.expected_orientation,
+                "observed_orientation": held_out.observed_orientation,
+                "raw_confidence": held_out.raw_confidence,
+                "calibrated_confidence": None,
+                "status": "insufficient_training_classes",
+            })
+            continue
+        model = fit_monotonic_calibrator(training)
+        rows.extend(evaluate_calibrator(model, [held_out]))
+    return rows
+
+
+def _safe_ratio(numerator: int, denominator: int) -> float:
+    return numerator / denominator if denominator else 0.0
+
+
+def threshold_sweep(predictions: Sequence[Mapping[str, object]]) -> list[ThresholdMetrics]:
+    available = [row for row in predictions if row.get("calibrated_confidence") is not None]
+    if not available:
+        return []
+    thresholds = sorted({0.0, 1.0, *(float(row["calibrated_confidence"]) for row in available)})
+    output: list[ThresholdMetrics] = []
+    for threshold in thresholds:
+        tp = fp = tn = fn = 0
+        for row in available:
+            predicted_copy = float(row["calibrated_confidence"]) >= threshold
+            actual_copy = row.get("label") == "copy"
+            if predicted_copy and actual_copy:
+                tp += 1
+            elif predicted_copy:
+                fp += 1
+            elif actual_copy:
+                fn += 1
+            else:
+                tn += 1
+        precision = _safe_ratio(tp, tp + fp)
+        recall = _safe_ratio(tp, tp + fn)
+        false_positive_rate = _safe_ratio(fp, fp + tn)
+        f1 = _safe_ratio(2 * tp, 2 * tp + fp + fn)
+        output.append(ThresholdMetrics(
+            threshold=threshold,
+            true_positive=tp,
+            false_positive=fp,
+            true_negative=tn,
+            false_negative=fn,
+            precision=precision,
+            recall=recall,
+            false_positive_rate=false_positive_rate,
+            f1=f1,
+        ))
+    return output
+
+
+def choose_threshold(metrics: Sequence[ThresholdMetrics]) -> ThresholdMetrics:
+    if not metrics:
+        raise ValueError("no threshold metrics available")
+    return max(metrics, key=lambda item: (item.f1, -item.false_positive_rate, item.precision, item.threshold))
+
+
+def _metrics_to_dict(item: ThresholdMetrics) -> dict[str, object]:
+    return {
+        "threshold": item.threshold,
+        "true_positive": item.true_positive,
+        "false_positive": item.false_positive,
+        "true_negative": item.true_negative,
+        "false_negative": item.false_negative,
+        "precision": item.precision,
+        "recall": item.recall,
+        "false_positive_rate": item.false_positive_rate,
+        "f1": item.f1,
+    }
+
+
+def _orientation_diagnostics(cases: Sequence[ScoredCase]) -> tuple[int, int, float | None]:
+    evaluated = [case for case in cases if case.label == "copy" and case.expected_orientation is not None]
+    correct = sum(case.expected_orientation == case.observed_orientation for case in evaluated)
+    accuracy = correct / len(evaluated) if evaluated else None
+    return len(evaluated), correct, accuracy
+
+
+def build_calibration_report(dataset: CalibrationDataset) -> dict[str, object]:
+    cases = list(dataset.cases)
+    predictions = cross_validated_predictions(cases)
+    metrics = threshold_sweep(predictions)
+    label_counts = {
+        "copy": sum(case.label == "copy" for case in cases),
+        "unrelated": sum(case.label == "unrelated" for case in cases),
+    }
+    evaluated, correct, accuracy = _orientation_diagnostics(cases)
+    report: dict[str, object] = {
+        "schema_version": "1.0",
+        "dataset_summary": {
+            "name": dataset.name,
+            "case_count": len(cases),
+            "case_ids": sorted(case.case_id for case in cases),
+            "label_counts": label_counts,
+        },
+        "class_counts": label_counts,
+        "orientation_evaluated": evaluated,
+        "orientation_correct": correct,
+        "orientation_accuracy": accuracy,
+        "predictions": predictions,
+        "threshold_sweep": [_metrics_to_dict(item) for item in metrics],
+        "threshold_space": "calibrated_confidence",
+    }
+    if not metrics:
+        report.update({"status": "calibration_unavailable", "selected_threshold": None, "selected_metrics": None, "model": None})
+        return report
+    selected = choose_threshold(metrics)
+    report.update({
+        "status": "ok",
+        "selected_threshold": selected.threshold,
+        "selected_metrics": _metrics_to_dict(selected),
+        "model": calibration_model_to_dict(fit_monotonic_calibrator(cases)),
+    })
+    return report
