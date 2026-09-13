@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased]
+## [0.2.0] - 2026-09-13
 
 ### Added
 - Read-only history collection from an already configured local MetaTrader 5 terminal using the optional official MetaTrader5 Python package.
