@@ -168,6 +168,22 @@ The forensic dashboard renders only precomputed report fields. It does not recom
 
 Forensic evidence is diagnostic, not proof of causation. A high score or consistent timeline can support an investigation, but CopyGraph does not claim that one account definitely copied another.
 
+## V0.3-C incremental SQLite scanner
+
+Use one local SQLite file to index the complete current source set, run incremental pair scans, and inspect immutable historical evidence:
+
+```bash
+copygraph index histories/ --db copygraph.db
+copygraph scan --db copygraph.db --output scan.json --dashboard dashboard.html
+copygraph inspect ACCOUNT_A ACCOUNT_B --db copygraph.db --output forensic.json --dashboard forensic.html
+```
+
+Each `index` invocation is authoritative for that database: any previously known source omitted from the invocation becomes inactive for the current state. Completed historical scans remain immutable and queryable with `--scan-id`, even after a source disappears or an account changes later.
+
+Pair reuse is keyed only by normalized analysis fingerprints plus the raw matching-engine version. Re-indexing unchanged data reuses all cached pair analyses; changing one account invalidates only pairs touching that account. Scan IDs additionally include snapshot metadata such as source count and latest event time, so metadata changes create a new immutable scan without forcing unrelated pair recomputation.
+
+The SQLite store is local-only and uses the same ingest, lifecycle, matching, graph, and forensic logic as the stateless commands. Raw absolute source paths, MT5 credentials, and terminal login configuration are not exported in reports; the store retains only privacy-safe source IDs and display names needed for local bookkeeping.
+
 ## Roadmap
 
-The remaining V0.3 milestone adds an incremental SQLite-backed scanner while preserving the local, read-only workflow.
+After V0.3, further work can focus on broader calibration datasets and production-scale operational validation without changing the raw matching engine casually.

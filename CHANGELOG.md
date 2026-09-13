@@ -10,9 +10,12 @@ All notable changes to this project are documented in this file.
 - Add forensic JSON with traceable matched timelines, delay/close consistency, lot-ratio drift, risk coverage, symbol breakdown, unmatched collisions, and supporting/contradictory evidence.
 - Add a self-contained forensic dashboard and stateless `inspect` CLI with optional calibrated confidence.
 - Add `calibrate` and `explain` CLI commands with optional calibrated confidence output.
+- Add local SQLite indexing with authoritative source-set semantics, immutable account snapshots, and privacy-safe source identifiers.
+- Add engine-versioned incremental pair caching, immutable historical scans, persistent forensic inspect, and `index`/`scan` CLI commands.
 
 ### Changed
 - Expose overlap, sample and matching-window factors from raw pair analysis without changing V0.2 scoring semantics.
+- Refactor stateless batch report assembly so persistent scans reuse the exact same graph/report pipeline.
 - Define the V0.3 architecture for calibrated confidence, forensic evidence reports, and incremental SQLite-backed multi-account scanning.
 
 ## [0.2.0] - 2026-09-13
