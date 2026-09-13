@@ -181,6 +181,8 @@ def apply_calibration(raw_confidence: float, model: CalibrationModel) -> float:
     if not model.blocks:
         raise ValueError("calibration model has no blocks")
     raw = float(raw_confidence)
+    if not 0.0 <= raw <= 1.0:
+        raise ValueError("raw_confidence must be between 0 and 1")
     for block in model.blocks:
         if raw <= block.max_raw:
             return block.probability

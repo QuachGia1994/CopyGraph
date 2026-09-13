@@ -80,3 +80,10 @@ def test_load_calibration_model_rejects_report_without_model(tmp_path):
 def test_fit_monotonic_calibrator_rejects_empty_cases():
     with pytest.raises(ValueError, match="at least one"):
         fit_monotonic_calibrator([])
+
+
+def test_apply_calibration_rejects_raw_confidence_outside_unit_interval():
+    model = fit_monotonic_calibrator(sample_cases())
+    for raw in (-0.01, 1.01):
+        with pytest.raises(ValueError, match="raw_confidence"):
+            apply_calibration(raw, model)

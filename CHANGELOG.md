@@ -4,7 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Add labeled monotonic confidence calibration with leave-one-out threshold diagnostics for precision, recall, false-positive rate and F1.
+- Add evidence-first confidence explanations with timing, lifecycle, risk and volume contributions, confidence penalties, match ordering and uncertainty warnings.
+- Add `calibrate` and `explain` CLI commands with optional calibrated confidence output.
+
 ### Changed
+- Expose overlap, sample and matching-window factors from raw pair analysis without changing V0.2 scoring semantics.
 - Define the V0.3 architecture for calibrated confidence, forensic evidence reports, and incremental SQLite-backed multi-account scanning.
 
 ## [0.2.0] - 2026-09-13

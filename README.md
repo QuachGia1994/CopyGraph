@@ -107,6 +107,53 @@ The V0.2 path remains local and read-only with respect to trading. `mt5-export` 
 
 The generated dashboard uses the same report only. Account-controlled strings are carried as escaped JSON and written into the DOM with `textContent`; the HTML has no external runtime resources.
 
+## V0.3-A calibration and explainability
+
+V0.3-A keeps the V0.2 raw matching engine unchanged and adds calibration as a separate evidence layer. A labeled calibration dataset is JSON with schema `1.0`, an optional `name`, and `cases[]`. Each case has a unique `case_id`, a `label` of `copy` or `unrelated`, optional expected `orientation`, and either relative `history_a`/`history_b` paths or an embedded raw analysis object. Resolved local paths are not copied into calibration output.
+
+Example dataset:
+
+```json
+{
+  "schema_version": "1.0",
+  "name": "reviewed MT5 pairs",
+  "cases": [
+    {
+      "case_id": "copy-001",
+      "label": "copy",
+      "orientation": "normal",
+      "history_a": "master.json",
+      "history_b": "slave.json"
+    },
+    {
+      "case_id": "control-001",
+      "label": "unrelated",
+      "analysis": {
+        "schema_version": "1.0",
+        "orientation": "normal",
+        "confidence": 0.08
+      }
+    }
+  ]
+}
+```
+
+Fit and evaluate calibration:
+
+```bash
+copygraph calibrate calibration-dataset.json --output calibration.json
+```
+
+Diagnostics use leave-one-out evaluation: the held-out case is never scored by a model fitted on that same case. The report includes precision, recall, false-positive rate, F1, orientation diagnostics, a deterministic selected threshold in `calibrated_confidence` space, and a monotonic deployment model fitted only after cross-validated diagnostics are built. If the dataset cannot support valid held-out evaluation, CopyGraph reports calibration unavailable rather than inventing a score.
+
+Explain one account pair, optionally applying a calibration model:
+
+```bash
+copygraph explain master.json slave.json --calibration calibration.json --output explanation.json
+```
+
+`raw_confidence` remains the exact V0.2 confidence. `calibrated_confidence` is additive and optional. Explanation JSON exposes timing, lifecycle, risk and volume contribution summaries, overlap/sample confidence factors, lead/lag evidence, strongest and weakest matched trades, unmatched counts, and explicit uncertainty warnings such as sparse samples or missing stop evidence. It remains evidence-first and does not claim that copying is proven.
+
 ## Roadmap
 
-Future work can focus on calibrated real-history datasets, richer per-match evidence inspection and larger-scale persistence only after the local V0.2 workflow is validated on representative MT5 exports.
+The remaining V0.3 milestones add forensic investigation views and an incremental SQLite-backed scanner while preserving the local, read-only workflow.
