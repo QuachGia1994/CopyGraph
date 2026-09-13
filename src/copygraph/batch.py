@@ -59,7 +59,7 @@ def analyze_histories(inputs: Sequence[str | Path], min_confidence: float = 0.7)
     analyses = [analyze_pair(positions[left], positions[right]) for left, right in combinations(names, 2)]
     summaries = []
     for name in names:
-        summaries.append({"account_id": name, "position_count": len(positions[name]), "sources": sorted(sources[name], key=str.lower)})
+        summaries.append({"account_id": name, "position_count": len(positions[name]), "source_count": len(sources[name])})
     pairs = [analysis_to_evidence(item) for item in analyses]
     pairs.sort(key=lambda item: (-float(item["confidence"]), tuple(item["accounts"])))
     graph = build_similarity_graph(analyses, min_confidence=min_confidence)

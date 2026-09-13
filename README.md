@@ -101,9 +101,9 @@ Lead-lag inference uses the median signed open-time delay of matched trades. Pos
 
 ## V0.2 workflow
 
-The V0.2 path remains local and read-only with respect to trading. `mt5-export` initializes the official MetaTrader5 Python bridge, reads historical deals and orders for the requested UTC window, enriches opening deals with historical SL/TP where available, writes normalized JSON, and shuts the bridge down. It does not place, modify, or close trades and it does not persist login/password/server credentials.
+The V0.2 path remains local and read-only with respect to trading. `mt5-export` initializes the official MetaTrader5 Python bridge, reads historical deals and orders for the requested UTC window, enriches opening and reversal deals with historical SL/TP where available, writes normalized JSON, and shuts the bridge down. It validates timezone-aware positive windows, does not place, modify, or close trades, and does not persist login/password/server credentials.
 
-`batch` then reuses the V0.1 ingest, lifecycle reconstruction, matching and graph engine across every discovered account. Identical inputs produce deterministic pair ordering, graph nodes/clusters and report timestamps derived from the latest event in the input data.
+`batch` then reuses the V0.1 ingest, lifecycle reconstruction, matching and graph engine across every discovered account. Netting reversals (`DEAL_ENTRY_INOUT`) are segmented into the closing leg and the residual opposite-side lifecycle; `DEAL_ENTRY_OUT_BY` is treated as a close. Identical inputs produce deterministic pair ordering, graph nodes/clusters and report timestamps derived from the latest event in the input data. Account summaries report only a source count rather than absolute local paths.
 
 The generated dashboard uses the same report only. Account-controlled strings are carried as escaped JSON and written into the DOM with `textContent`; the HTML has no external runtime resources.
 

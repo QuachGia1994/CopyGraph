@@ -127,3 +127,65 @@ def test_collect_mt5_history_raises_on_order_history_error_and_shuts_down():
     with pytest.raises(MT5Error, match="history_orders_get"):
         collect_mt5_history(FROM, TO, mt5_module=mt5)
     assert mt5.shutdown_calls == 1
+
+
+def test_collect_mt5_history_wraps_runtime_api_exceptions_and_shuts_down():
+    class RaisingMT5(FakeMT5):
+        def history_deals_get(self, date_from, date_to):
+            raise RuntimeError("bridge exploded")
+
+    mt5 = RaisingMT5()
+    with pytest.raises(MT5Error, match="history_deals_get"):
+        collect_mt5_history(FROM, TO, mt5_module=mt5)
+    assert mt5.shutdown_calls == 1
+
+
+def test_collect_mt5_history_rejects_naive_datetimes_before_initialize():
+    mt5 = FakeMT5()
+    naive = datetime(2026, 9, 1)
+    with pytest.raises(ValueError, match="timezone-aware"):
+        collect_mt5_history(naive, TO, mt5_module=mt5)
+    assert mt5.initialize_args is None
+
+
+def test_collect_mt5_history_rejects_non_positive_window_before_initialize():
+    mt5 = FakeMT5()
+    with pytest.raises(ValueError, match="date_from"):
+        collect_mt5_history(TO, FROM, mt5_module=mt5)
+    assert mt5.initialize_args is None
+
+
+def test_collect_mt5_history_does_not_replace_explicit_zero_risk_order_with_other_position_order():
+    deals = (Deal(11, 101, 1_757_000_000, 0, 0, 7, 0.2, 1.1000, 0.0, "EURUSD"),)
+    orders = (
+        Order(100, 7, 1_756_999_500, 1.0800, 1.1300),
+        Order(101, 7, 1_756_999_990, 0.0, 0.0),
+    )
+    payload = collect_mt5_history(FROM, TO, mt5_module=FakeMT5(deals=deals, orders=orders))
+    assert "sl" not in payload["records"][0]
+    assert "tp" not in payload["records"][0]
+
+
+def test_collect_mt5_history_position_fallback_never_uses_future_order():
+    deals = (Deal(11, 999, 1_757_000_000, 0, 0, 7, 0.2, 1.1000, 0.0, "EURUSD"),)
+    orders = (Order(101, 7, 1_757_000_100, 1.0800, 1.1300),)
+    payload = collect_mt5_history(FROM, TO, mt5_module=FakeMT5(deals=deals, orders=orders))
+    assert "sl" not in payload["records"][0]
+    assert "tp" not in payload["records"][0]
+
+
+def test_collect_mt5_history_wraps_malformed_history_records():
+    deals = (Deal(11, 101, 1_757_000_000, 0, 0, 7, 0.2, 1.1000, 0.0, "EURUSD"),)
+    orders = (Order(101, 7, 1_756_999_990, "invalid", 1.1300),)
+    with pytest.raises(MT5Error, match="normalization"):
+        collect_mt5_history(FROM, TO, mt5_module=FakeMT5(deals=deals, orders=orders))
+
+
+def test_collect_mt5_history_enriches_reverse_deal_risk_levels():
+    deals = (Deal(11, 101, 1_757_000_000, 1, 2, 7, 2.0, 1.0900, -10.0, "EURUSD"),)
+    orders = (Order(101, 7, 1_756_999_990, 1.1100, 1.0500),)
+    payload = collect_mt5_history(FROM, TO, mt5_module=FakeMT5(deals=deals, orders=orders))
+    record = payload["records"][0]
+    assert record["entry"] == 2
+    assert record["sl"] == pytest.approx(1.11)
+    assert record["tp"] == pytest.approx(1.05)

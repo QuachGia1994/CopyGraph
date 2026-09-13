@@ -15,4 +15,5 @@ def test_batch_merges_same_account_across_sources(tmp_path):
     account = analyze_histories([first, second])["accounts"][0]
     assert account["account_id"] == "same"
     assert account["position_count"] == 4
-    assert len(account["sources"]) == 2
+    assert account["source_count"] == 2
+    assert "sources" not in account

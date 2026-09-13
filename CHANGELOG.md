@@ -11,6 +11,12 @@ All notable changes to this project are documented in this file.
 - Self-contained static HTML dashboard with embedded report JSON, ranked relationships, cluster summaries and an SVG account network.
 - CLI commands `mt5-export` and `batch` with optional dashboard generation and configurable graph confidence threshold.
 
+### Fixed
+- Normalize unexpected MetaTrader5 bridge/history-record exceptions into `MT5Error`, validate timezone-aware positive history windows, and preserve primary failures if shutdown also fails.
+- Prevent SL/TP enrichment from borrowing explicit-zero or future orders from the same position.
+- Reconstruct MT5 netting reversals (`DEAL_ENTRY_INOUT`) as separate lifecycle segments and support `DEAL_ENTRY_OUT_BY` close semantics.
+- Remove absolute local source paths from batch report account summaries; expose only `source_count`.
+
 ## [0.1.0] - 2026-09-13
 
 ### Added

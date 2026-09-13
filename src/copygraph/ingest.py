@@ -66,7 +66,9 @@ def _event(value: object) -> str:
     text = str(value if value not in (None, "") else "in").strip().lower()
     if text in {"0", "in", "open", "entry", "opening"}:
         return "OPEN"
-    if text in {"1", "2", "out", "inout", "close", "exit", "closing"}:
+    if text in {"2", "inout", "reverse", "reversal"}:
+        return "REVERSE"
+    if text in {"1", "3", "out", "out_by", "outby", "close", "exit", "closing"}:
         return "CLOSE"
     raise ValueError(f"unsupported event: {value}")
 
