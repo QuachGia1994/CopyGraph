@@ -7,6 +7,8 @@ All notable changes to this project are documented in this file.
 ### Added
 - Add labeled monotonic confidence calibration with leave-one-out threshold diagnostics for precision, recall, false-positive rate and F1.
 - Add evidence-first confidence explanations with timing, lifecycle, risk and volume contributions, confidence penalties, match ordering and uncertainty warnings.
+- Add forensic JSON with traceable matched timelines, delay/close consistency, lot-ratio drift, risk coverage, symbol breakdown, unmatched collisions, and supporting/contradictory evidence.
+- Add a self-contained forensic dashboard and stateless `inspect` CLI with optional calibrated confidence.
 - Add `calibrate` and `explain` CLI commands with optional calibrated confidence output.
 
 ### Changed

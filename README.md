@@ -154,6 +154,20 @@ copygraph explain master.json slave.json --calibration calibration.json --output
 
 `raw_confidence` remains the exact V0.2 confidence. `calibrated_confidence` is additive and optional. Explanation JSON exposes timing, lifecycle, risk and volume contribution summaries, overlap/sample confidence factors, lead/lag evidence, strongest and weakest matched trades, unmatched counts, and explicit uncertainty warnings such as sparse samples or missing stop evidence. It remains evidence-first and does not claim that copying is proven.
 
+## V0.3-B forensic investigation
+
+Build a forensic JSON report and optional self-contained dashboard for two histories:
+
+```bash
+copygraph inspect master.json slave.json --output forensic.json --dashboard forensic.html
+```
+
+`inspect` reuses the same normalized lifecycles and raw pair analysis. The report includes a chronological matched-trade timeline with lifecycle IDs/timestamps, open-delay histogram, close-delay consistency, lot-ratio drift, risk-evidence coverage, per-symbol matched/unmatched breakdown, strongest and weakest matched evidence, and explicit contradictory evidence for unmatched or near-window collisions. Reverse-copy orientation and reversal segment IDs such as `7#2` remain traceable in the report.
+
+The forensic dashboard renders only precomputed report fields. It does not recompute scoring in JavaScript, does not load a CDN or remote runtime, and treats report strings as untrusted text. The pair network shows only the two investigated accounts; cluster context still belongs to the multi-account batch dashboard.
+
+Forensic evidence is diagnostic, not proof of causation. A high score or consistent timeline can support an investigation, but CopyGraph does not claim that one account definitely copied another.
+
 ## Roadmap
 
-The remaining V0.3 milestones add forensic investigation views and an incremental SQLite-backed scanner while preserving the local, read-only workflow.
+The remaining V0.3 milestone adds an incremental SQLite-backed scanner while preserving the local, read-only workflow.

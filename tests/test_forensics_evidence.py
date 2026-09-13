@@ -37,6 +37,19 @@ def test_unmatched_near_window_is_reported_with_traceable_ids():
     assert any(item["kind"] == "near_window_collision" for item in report["contradictory_evidence"])
 
 
+def test_unmatched_near_window_is_symmetric_for_account_b():
+    left = [position("a", 1, open_s=20)]
+    right = [position("b", 1, open_s=15), position("b", 2, open_s=0)]
+    report = build_forensic_report(analyze_pair(left, right), left, right)
+    assert report["unmatched_counts"] == {"a": 0, "b": 1}
+    row = report["unmatched_near_window"][0]
+    assert row["unmatched_account"] == "b"
+    assert row["unmatched_position_id"] == "2"
+    assert row["nearest_other_position_id"] == "1"
+    assert row["nearest_other_was_matched"] is True
+    assert row["delay_s"] == -20.0
+
+
 def test_symbol_breakdown_is_ranked_by_matched_count_then_symbol():
     left = [
         position("a", 1, symbol="EURUSD", open_s=0),
