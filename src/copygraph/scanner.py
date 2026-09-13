@@ -10,6 +10,8 @@ from .batch import assemble_batch_report
 from .evidence import analysis_from_evidence, analysis_to_evidence
 from .indexer import AccountVersion, load_current_account_versions
 from .matching import PairAnalysis, analyze_pair
+from .models import PositionLifecycle
+from .serde import lifecycle_from_dict
 from .store import StoreError
 
 
@@ -87,6 +89,32 @@ def load_scan(connection: sqlite3.Connection, scan_id: str | None = None) -> dic
     if not isinstance(payload, dict):
         raise StoreError("stored scan report is invalid")
     return payload
+
+
+def load_scan_account_positions(
+    connection: sqlite3.Connection,
+    scan_id: str,
+    account_id: str,
+) -> list[PositionLifecycle]:
+    row = connection.execute(
+        "SELECT av.lifecycles_json FROM scan_accounts sa "
+        "JOIN account_versions av ON av.account_id = sa.account_id "
+        "AND av.snapshot_fingerprint = sa.snapshot_fingerprint "
+        "WHERE sa.scan_id = ? AND sa.account_id = ?",
+        (scan_id, account_id),
+    ).fetchone()
+    if row is None:
+        scan = connection.execute(
+            "SELECT 1 FROM scans WHERE scan_id = ? AND completed = ?",
+            (scan_id, 1),
+        ).fetchone()
+        if scan is None:
+            raise StoreError(f"scan not found: {scan_id}")
+        raise StoreError(f"account not found in scan: {account_id}")
+    payload = json.loads(str(row["lifecycles_json"]))
+    if not isinstance(payload, list):
+        raise StoreError("stored account lifecycles are invalid")
+    return [lifecycle_from_dict(item) for item in payload]
 
 
 def run_scan(connection: sqlite3.Connection, min_confidence: float = 0.7) -> ScanRunResult:
