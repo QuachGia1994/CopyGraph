@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased]
+## [0.3.0] - 2026-09-13
 
 ### Added
 - Add labeled monotonic confidence calibration with leave-one-out threshold diagnostics for precision, recall, false-positive rate and F1.
