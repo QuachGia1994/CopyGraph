@@ -43,6 +43,9 @@ class PairAnalysis:
     median_delay_s: float = 0.0
     total_a: int = 0
     total_b: int = 0
+    overlap_factor: float = 0.0
+    sample_factor: float = 0.0
+    matching_window_s: float = 0.0
 
 
 def rarity_weight(frequency: int) -> float:
@@ -157,6 +160,8 @@ def _analyze_orientation(account_a: list[PositionLifecycle], account_b: list[Pos
         median_delay_s = 0.0
         confidence = 0.0
         lead_account = None
+        overlap = 0.0
+        sample_factor = 0.0
 
     return PairAnalysis(
         account_a=account_a_name,
@@ -170,6 +175,9 @@ def _analyze_orientation(account_a: list[PositionLifecycle], account_b: list[Pos
         median_delay_s=median_delay_s,
         total_a=len(account_a),
         total_b=len(account_b),
+        overlap_factor=overlap,
+        sample_factor=sample_factor,
+        matching_window_s=hard_window,
     )
 
 

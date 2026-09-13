@@ -129,3 +129,13 @@ def test_matching_is_one_to_one_and_does_not_reuse_trade():
     account_b = [pos("b", 9, open_s=3)]
     analysis = analyze_pair(account_a, account_b, MatchingConfig(min_matches=1))
     assert len(analysis.matches) == 1
+
+
+def test_pair_analysis_exposes_confidence_factors():
+    master, slave = copied_pair()
+    analysis = analyze_pair(master, slave)
+    assert analysis.overlap_factor == pytest.approx(len(analysis.matches) / max(len(master), len(slave)))
+    assert analysis.sample_factor == 1.0
+    config = MatchingConfig()
+    assert analysis.matching_window_s == pytest.approx(config.time_tolerance_s * config.hard_time_factor)
+    assert analysis.confidence == pytest.approx(analysis.score * analysis.overlap_factor * analysis.sample_factor)

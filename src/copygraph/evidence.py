@@ -12,6 +12,11 @@ def analysis_to_evidence(analysis: PairAnalysis) -> dict[str, object]:
         "orientation": analysis.orientation,
         "score": analysis.score,
         "confidence": analysis.confidence,
+        "confidence_factors": {
+            "overlap": analysis.overlap_factor,
+            "sample": analysis.sample_factor,
+        },
+        "matching_window_s": analysis.matching_window_s,
         "lead_account": analysis.lead_account,
         "median_delay_s": analysis.median_delay_s,
         "volume_similarity": analysis.volume_similarity,

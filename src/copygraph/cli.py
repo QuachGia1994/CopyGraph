@@ -5,20 +5,17 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from .analysis import analyze_pair_paths
 from .batch import analyze_histories
 from .benchmark import run_synthetic_benchmark
 from .dashboard import write_dashboard
 from .evidence import analysis_to_evidence
-from .ingest import load_events
-from .lifecycle import reconstruct_positions
-from .matching import analyze_pair
 from .mt5 import collect_mt5_history
 
 
 def analyze_paths(path_a: str | Path, path_b: str | Path) -> dict[str, object]:
-    positions_a = reconstruct_positions(load_events(path_a))
-    positions_b = reconstruct_positions(load_events(path_b))
-    return analysis_to_evidence(analyze_pair(positions_a, positions_b))
+    analysis, _, _ = analyze_pair_paths(path_a, path_b)
+    return analysis_to_evidence(analysis)
 
 
 def _unit_interval(value: str) -> float:

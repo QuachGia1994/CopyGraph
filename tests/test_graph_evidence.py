@@ -29,6 +29,9 @@ def analysis(a, b, confidence, orientation="normal"):
         median_delay_s=12.0,
         total_a=4,
         total_b=4,
+        overlap_factor=0.75,
+        sample_factor=1.0,
+        matching_window_s=360.0,
     )
 
 
@@ -61,3 +64,9 @@ def test_evidence_preserves_reverse_copy_orientation():
     payload = analysis_to_evidence(analysis("a", "b", 0.91, orientation="reverse"))
     assert payload["orientation"] == "reverse"
     assert payload["lead_account"] == "a"
+
+
+def test_evidence_exposes_confidence_factors_and_matching_window():
+    payload = analysis_to_evidence(analysis("a", "b", 0.9))
+    assert payload["confidence_factors"] == {"overlap": 0.75, "sample": 1.0}
+    assert payload["matching_window_s"] == 360.0
