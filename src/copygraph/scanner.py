@@ -7,9 +7,11 @@ from dataclasses import dataclass
 from itertools import combinations
 
 from .batch import assemble_batch_report
+from .calibration import CalibrationModel
 from .evidence import analysis_from_evidence, analysis_to_evidence
+from .forensics import build_forensic_report
 from .indexer import AccountVersion, load_current_account_versions
-from .matching import PairAnalysis, analyze_pair
+from .matching import MatchedTrade, PairAnalysis, analyze_pair
 from .models import PositionLifecycle
 from .serde import lifecycle_from_dict
 from .store import StoreError
@@ -115,6 +117,108 @@ def load_scan_account_positions(
     if not isinstance(payload, list):
         raise StoreError("stored account lifecycles are invalid")
     return [lifecycle_from_dict(item) for item in payload]
+
+
+def _load_scan_account_analysis_fingerprint(
+    connection: sqlite3.Connection,
+    scan_id: str,
+    account_id: str,
+) -> str:
+    row = connection.execute(
+        "SELECT av.analysis_fingerprint FROM scan_accounts sa "
+        "JOIN account_versions av ON av.account_id = sa.account_id "
+        "AND av.snapshot_fingerprint = sa.snapshot_fingerprint "
+        "WHERE sa.scan_id = ? AND sa.account_id = ?",
+        (scan_id, account_id),
+    ).fetchone()
+    if row is None:
+        raise StoreError(f"account not found in scan: {account_id}")
+    return str(row["analysis_fingerprint"])
+
+
+def _reverse_analysis(analysis: PairAnalysis) -> PairAnalysis:
+    return PairAnalysis(
+        account_a=analysis.account_b,
+        account_b=analysis.account_a,
+        orientation=analysis.orientation,
+        score=analysis.score,
+        confidence=analysis.confidence,
+        matches=[
+            MatchedTrade(
+                a_position_id=match.b_position_id,
+                b_position_id=match.a_position_id,
+                delay_s=-match.delay_s,
+                time_similarity=match.time_similarity,
+                lifecycle_similarity=match.lifecycle_similarity,
+                risk_similarity=match.risk_similarity,
+                volume_similarity=match.volume_similarity,
+                rarity_weight=match.rarity_weight,
+                score=match.score,
+            )
+            for match in analysis.matches
+        ],
+        volume_similarity=analysis.volume_similarity,
+        lead_account=analysis.lead_account,
+        median_delay_s=-analysis.median_delay_s,
+        total_a=analysis.total_b,
+        total_b=analysis.total_a,
+        overlap_factor=analysis.overlap_factor,
+        sample_factor=analysis.sample_factor,
+        matching_window_s=analysis.matching_window_s,
+    )
+
+
+def inspect_scan_pair(
+    connection: sqlite3.Connection,
+    account_a: str,
+    account_b: str,
+    scan_id: str | None = None,
+    calibration: CalibrationModel | None = None,
+) -> dict[str, object]:
+    resolved = scan_id if scan_id is not None else latest_scan_id(connection)
+    if resolved is None:
+        raise StoreError("no completed scan available")
+    scan_row = connection.execute(
+        "SELECT engine_version FROM scans WHERE scan_id = ? AND completed = ?",
+        (resolved, 1),
+    ).fetchone()
+    if scan_row is None:
+        raise StoreError(f"scan not found: {resolved}")
+    if account_a == account_b:
+        raise ValueError("account_a and account_b must be different")
+
+    requested_positions_a = load_scan_account_positions(connection, resolved, account_a)
+    requested_positions_b = load_scan_account_positions(connection, resolved, account_b)
+    fingerprints = {
+        account_a: _load_scan_account_analysis_fingerprint(connection, resolved, account_a),
+        account_b: _load_scan_account_analysis_fingerprint(connection, resolved, account_b),
+    }
+    left_name, right_name = sorted((account_a, account_b))
+    row = connection.execute(
+        "SELECT evidence_json FROM pair_cache WHERE account_a = ? AND account_b = ? "
+        "AND analysis_fingerprint_a = ? AND analysis_fingerprint_b = ? AND engine_version = ?",
+        (
+            left_name,
+            right_name,
+            fingerprints[left_name],
+            fingerprints[right_name],
+            str(scan_row["engine_version"]),
+        ),
+    ).fetchone()
+    if row is None:
+        raise StoreError("pair evidence missing from completed scan")
+    payload = json.loads(str(row["evidence_json"]))
+    if not isinstance(payload, dict):
+        raise StoreError("cached pair evidence is invalid")
+    analysis = analysis_from_evidence(payload)
+    if (account_a, account_b) != (left_name, right_name):
+        analysis = _reverse_analysis(analysis)
+    return build_forensic_report(
+        analysis,
+        requested_positions_a,
+        requested_positions_b,
+        calibration,
+    )
 
 
 def run_scan(connection: sqlite3.Connection, min_confidence: float = 0.7) -> ScanRunResult:
