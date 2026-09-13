@@ -1,6 +1,6 @@
 import json
 
-from copygraph.evidence import analysis_to_evidence
+from copygraph.evidence import analysis_from_evidence, analysis_to_evidence
 from copygraph.graph import build_similarity_graph, connected_components
 from copygraph.matching import MatchedTrade, PairAnalysis
 
@@ -70,3 +70,26 @@ def test_evidence_exposes_confidence_factors_and_matching_window():
     payload = analysis_to_evidence(analysis("a", "b", 0.9))
     assert payload["confidence_factors"] == {"overlap": 0.75, "sample": 1.0}
     assert payload["matching_window_s"] == 360.0
+
+
+def test_pair_analysis_evidence_round_trip():
+    original = analysis("a", "b", 0.9)
+    assert analysis_from_evidence(analysis_to_evidence(original)) == original
+
+
+def test_analysis_from_evidence_rejects_unknown_schema():
+    payload = analysis_to_evidence(analysis("a", "b", 0.9))
+    payload["schema_version"] = "9.0"
+    import pytest
+    with pytest.raises(ValueError, match="schema_version"):
+        analysis_from_evidence(payload)
+
+
+def test_analysis_from_evidence_backward_defaults_missing_additive_fields():
+    payload = analysis_to_evidence(analysis("a", "b", 0.9))
+    payload.pop("confidence_factors")
+    payload.pop("matching_window_s")
+    restored = analysis_from_evidence(payload)
+    assert restored.overlap_factor == 0.0
+    assert restored.sample_factor == 0.0
+    assert restored.matching_window_s == 0.0
