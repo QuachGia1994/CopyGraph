@@ -2,19 +2,37 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from .batch import analyze_histories
 from .benchmark import run_synthetic_benchmark
+from .dashboard import write_dashboard
 from .evidence import analysis_to_evidence
 from .ingest import load_events
 from .lifecycle import reconstruct_positions
 from .matching import analyze_pair
+from .mt5 import collect_mt5_history
 
 
 def analyze_paths(path_a: str | Path, path_b: str | Path) -> dict[str, object]:
     positions_a = reconstruct_positions(load_events(path_a))
     positions_b = reconstruct_positions(load_events(path_b))
     return analysis_to_evidence(analyze_pair(positions_a, positions_b))
+
+
+def _unit_interval(value: str) -> float:
+    parsed = float(value)
+    if not 0.0 <= parsed <= 1.0:
+        raise argparse.ArgumentTypeError("value must be between 0 and 1")
+    return parsed
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be greater than 0")
+    return parsed
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -25,6 +43,15 @@ def _parser() -> argparse.ArgumentParser:
     analyze.add_argument("account_b")
     analyze.add_argument("--output", type=Path)
     subparsers.add_parser("benchmark", help="Run the deterministic synthetic benchmark")
+    mt5_export = subparsers.add_parser("mt5-export", help="Export normalized history from the configured MT5 terminal")
+    mt5_export.add_argument("--days", type=_positive_int, required=True)
+    mt5_export.add_argument("--terminal")
+    mt5_export.add_argument("--output", type=Path, required=True)
+    batch = subparsers.add_parser("batch", help="Compare all accounts found in CSV/JSON histories")
+    batch.add_argument("inputs", nargs="+")
+    batch.add_argument("--output", type=Path, required=True)
+    batch.add_argument("--dashboard", type=Path)
+    batch.add_argument("--min-confidence", type=_unit_interval, default=0.7)
     return parser
 
 
@@ -32,11 +59,19 @@ def main(argv=None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "benchmark":
         payload = run_synthetic_benchmark()
-    else:
+    elif args.command == "analyze":
         payload = analyze_paths(args.account_a, args.account_b)
+    elif args.command == "mt5-export":
+        now = datetime.now(timezone.utc)
+        payload = collect_mt5_history(now - timedelta(days=args.days), now, terminal_path=args.terminal)
+    else:
+        payload = analyze_histories(args.inputs, min_confidence=args.min_confidence)
+        if args.dashboard is not None:
+            write_dashboard(payload, args.dashboard)
     rendered = json.dumps(payload, indent=2, sort_keys=True)
     output = getattr(args, "output", None)
     if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(rendered + "\n", encoding="utf-8")
     print(rendered)
     return 0

@@ -21,10 +21,16 @@ CopyGraph outputs similarity evidence. Confidence should be interpreted together
 
 ## Requirements
 
-Python 3.11 or newer. Runtime uses only the Python standard library.
+Python 3.11 or newer. The core runtime uses only the Python standard library.
 
 ```bash
 python -m pip install -e .
+```
+
+For direct collection from a local MetaTrader 5 terminal on Windows, install the optional official MetaQuotes integration:
+
+```bash
+python -m pip install -e ".[mt5]"
 ```
 
 For development tests:
@@ -65,6 +71,26 @@ Run the deterministic synthetic benchmark:
 copygraph benchmark
 ```
 
+Export recent history from the MT5 terminal that is already configured and logged in on the machine:
+
+```bash
+copygraph mt5-export --days 30 --output account-history.json
+```
+
+If several terminal installations exist, select one explicitly without storing credentials in CopyGraph:
+
+```bash
+copygraph mt5-export --days 30 --terminal "C:\\Program Files\\MetaTrader 5\\terminal64.exe" --output account-history.json
+```
+
+Scan every account found across files or directories. Directories are searched recursively for `.csv` and `.json` histories, and account identity comes from each record rather than the filename:
+
+```bash
+copygraph batch histories/ account-history.json --output report.json --dashboard dashboard.html
+```
+
+Use `--min-confidence 0.8` to change the graph-edge threshold. The batch JSON contains account summaries, every unordered pair analysis, the thresholded similarity graph, and connected clusters. The optional dashboard is one self-contained local HTML file with embedded report data and no CDN or server dependency.
+
 ## Matching model
 
 CopyGraph canonicalizes symbols and reconstructs complete position lifecycles before comparing accounts. Candidate trades must share the canonical symbol and either the same side for normal copy or the opposite side for reverse copy. Matching is one-to-one within a bounded time window.
@@ -73,6 +99,14 @@ Each matched trade contributes timing, lifecycle, risk and volume-consistency ev
 
 Lead-lag inference uses the median signed open-time delay of matched trades. Positive delay means account A led account B; negative delay means account B led account A.
 
+## V0.2 workflow
+
+The V0.2 path remains local and read-only with respect to trading. `mt5-export` initializes the official MetaTrader5 Python bridge, reads historical deals and orders for the requested UTC window, enriches opening deals with historical SL/TP where available, writes normalized JSON, and shuts the bridge down. It does not place, modify, or close trades and it does not persist login/password/server credentials.
+
+`batch` then reuses the V0.1 ingest, lifecycle reconstruction, matching and graph engine across every discovered account. Identical inputs produce deterministic pair ordering, graph nodes/clusters and report timestamps derived from the latest event in the input data.
+
+The generated dashboard uses the same report only. Account-controlled strings are carried as escaped JSON and written into the DOM with `textContent`; the HTML has no external runtime resources.
+
 ## Roadmap
 
-V0.2 is intentionally outside this release: direct real MT5 history workflow, multi-account batch scanning and a dashboard.
+Future work can focus on calibrated real-history datasets, richer per-match evidence inspection and larger-scale persistence only after the local V0.2 workflow is validated on representative MT5 exports.

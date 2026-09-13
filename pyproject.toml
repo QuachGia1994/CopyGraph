@@ -12,6 +12,9 @@ license = "MIT"
 authors = [{ name = "QuachGia1994" }]
 dependencies = []
 
+[project.optional-dependencies]
+mt5 = ["MetaTrader5>=5.0.6180,<6; platform_system == 'Windows'"]
+
 [project.scripts]
 copygraph = "copygraph.cli:main"
 
