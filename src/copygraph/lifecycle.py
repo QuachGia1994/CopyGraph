@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from collections import defaultdict
 from dataclasses import replace
 from typing import Iterable
@@ -100,8 +101,19 @@ def reconstruct_positions(events: Iterable[TradeEvent]) -> list[PositionLifecycl
 
             if event.event == "CLOSE":
                 if not opens or remaining_volume <= _EPSILON:
+                    warnings.warn(
+                        f"orphan CLOSE discarded for {account_id}/{base_position_id} "
+                        f"ticket {event.ticket}: no open volume remaining",
+                        stacklevel=2,
+                    )
                     continue
                 close_volume = min(event.volume, remaining_volume)
+                if event.volume - close_volume > _EPSILON:
+                    warnings.warn(
+                        f"excess CLOSE volume truncated for {account_id}/{base_position_id} "
+                        f"ticket {event.ticket}: {event.volume} exceeds remaining {remaining_volume}",
+                        stacklevel=2,
+                    )
                 if close_volume <= _EPSILON:
                     continue
                 closes.append(replace(event, volume=close_volume))
@@ -112,6 +124,11 @@ def reconstruct_positions(events: Iterable[TradeEvent]) -> list[PositionLifecycl
 
             if event.event == "REVERSE":
                 if not opens or remaining_volume <= _EPSILON:
+                    warnings.warn(
+                        f"orphan REVERSE discarded for {account_id}/{base_position_id} "
+                        f"ticket {event.ticket}: no open volume remaining",
+                        stacklevel=2,
+                    )
                     continue
                 close_volume = min(event.volume, remaining_volume)
                 if close_volume > _EPSILON:

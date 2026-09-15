@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -15,9 +16,9 @@ from .explain import explain_pair
 from .forensic_dashboard import write_forensic_dashboard
 from .forensics import build_forensic_report
 from .indexer import index_inputs
-from .mt5 import collect_mt5_history
+from .mt5 import MT5Error, collect_mt5_history
 from .scanner import inspect_scan_pair, run_scan
-from .store import open_store
+from .store import StoreError, open_store
 
 
 def analyze_paths(path_a: str | Path, path_b: str | Path) -> dict[str, object]:
@@ -146,6 +147,9 @@ def main(argv=None) -> int:
             output.write_text(rendered + "\n", encoding="utf-8")
         print(rendered)
         return 0
+    except (MT5Error, StoreError, OSError, ValueError) as exc:
+        print(f"copygraph: {args.command}: {exc}", file=sys.stderr)
+        return 1
     finally:
         if connection is not None:
             connection.close()

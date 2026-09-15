@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Mapping
@@ -22,10 +23,17 @@ def _pick(record: Mapping[str, object], *names: str, default: object = None) -> 
     return default
 
 
+def _finite_float(value: object) -> float:
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"non-finite numeric value: {value!r}")
+    return number
+
+
 def _optional_float(value: object, default: float | None = None) -> float | None:
     if value in (None, ""):
         return default
-    return float(value)
+    return _finite_float(value)
 
 
 def _timestamp(value: object) -> datetime:
@@ -98,8 +106,8 @@ def parse_records(records: Iterable[Mapping[str, object]]) -> list[TradeEvent]:
             position_id=str(position),
             symbol=canonicalize_symbol(symbol),
             side=_side(raw_type),
-            volume=float(volume),
-            price=float(price),
+            volume=_finite_float(volume),
+            price=_finite_float(price),
             timestamp=_timestamp(timestamp),
             event=_event(_pick(record, "event", "entry", "action")),
             sl=_optional_float(_pick(record, "sl", "stop_loss")),
